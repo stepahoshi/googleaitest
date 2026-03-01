@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Nickname Comparator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;800&display=swap" rel="stylesheet">
+    <!-- Подключаем Tesseract.js -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #08080a;
+            --glass: rgba(255, 255, 255, 0.03);
+            --border: rgba(255, 255, 255, 0.08);
+            --accent: #00f2ff;
+        }
+
+        body {
+            background: var(--bg-dark);
+            color: #e0e0e0;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+        }
+
+        /* Анимированный фон */
+        .bg-glow {
+            position: fixed;
+            width: 100vw; height: 100vh;
+            background: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #08080a 100%);
+            z-index: -1;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            width: 95%;
+            max-width: 1400px;
+            margin-top: 50px;
+            padding-bottom: 50px;
+        }
+
+        /* Стиль жидкого стекла */
+        .column {
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            min-height: 600px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: 0.3s;
+        }
+
+        .column:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+            color: var(--accent);
+            text-align: center;
+        }
+
+        .upload-area {
+            border: 2px dashed rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover {
+            background: rgba(255,255,255,0.05);
+            border-color: var(--accent);
+        }
+
+        textarea {
+            width: 100%;
+            flex-grow: 1;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: #fff;
+            padding: 15px;
+            font-size: 14px;
+            resize: none;
+            outline: none;
+        }
+
+        .status {
+            font-size: 12px;
+            margin-top: 10px;
+            color: #888;
+        }
+
+        /* Результаты */
+        .diff-item {
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            background: rgba(0, 242, 255, 0.1);
+            border-left: 3px solid var(--accent);
+            border-radius: 4px;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .btn-compare {
+            margin-top: 20px;
+            padding: 15px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+
+        input[type="file"] { display: none; }
+
+        /* Loader */
+        .loader {
+            width: 20px; height: 20px;
+            border: 2px solid #fff;
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            animation: rotation 1s linear infinite;
+            display: none;
+            margin-right: 10px;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 900px) {
+            .container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-glow"></div>
+
+    <h1 style="margin-top: 40px; font-weight: 800;">LIQUID <span style="color: var(--accent)">SCANNER</span></h1>
+
+    <div class="container">
+        <!-- Столбец 1: Исходный список -->
+        <div class="column">
+            <h2>Список 1 (База)</h2>
+            <label class="upload-area" id="drop-1">
+                <span>Загрузить скриншот/видео</span>
+                <input type="file" id="file-1" accept="image/*,video/*">
+            </label>
+            <div id="status-1" class="status">Готов к загрузке</div>
+            <textarea id="list-1" placeholder="Никнеймы появятся здесь..."></textarea>
+        </div>
+
+        <!-- Столбец 2: Новый список -->
+        <div class="column">
+            <h2>Список 2 (Проверка)</h2>
+            <label class="upload-area" id="drop-2">
+                <span>Загрузить скриншот/видео</span>
+                <input type="file" id="file-2" accept="image/*,video/*">
+            </label>
+            <div id="status-2" class="status">Готов к загрузке</div>
+            <textarea id="list-2" placeholder="Никнеймы появятся здесь..."></textarea>
+        </div>
+
+        <!-- Столбец 3: Результат -->
+        <div class="column">
+            <h2>Разница (Кого нет в 1)</h2>
+            <div id="diff-output" style="flex-grow: 1; overflow-y: auto;">
+                <p style="text-align: center; color: #555;">Загрузите оба списка для сравнения</p>
+            </div>
+            <button class="btn-compare" onclick="compareLists()">Сравнить списки</button>
+        </div>
+    </div>
+
+    <script>
+        const worker = Tesseract.createWorker({
+            logger: m => {
+                if (m.status === 'recognizing text') {
+                    updateStatus(activeId, `Распознавание: ${Math.round(m.progress * 100)}%`);
+                }
+            }
+        });
+
+        let activeId = null;
+
+        async function initTesseract() {
+            await (await worker).loadLanguage('eng+rus');
+            await (await worker).initialize('eng+rus');
+        }
+
+        initTesseract();
+
+        // Обработка загрузки файлов
+        document.querySelectorAll('input[type="file"]').forEach(input => {
+            input.addEventListener('change', async (e) => {
+                const id = e.target.id.split('-')[1];
+                activeId = id;
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const statusEl = document.getElementById(`status-${id}`);
+                statusEl.innerHTML = '<span class="loader" style="display:inline-block"></span> Обработка...';
+
+                if (file.type.startsWith('image/')) {
+                    processImage(file, id);
+                } else if (file.type.startsWith('video/')) {
+                    processVideo(file, id);
+                }
+            });
+        });
+
+        async function processImage(source, id) {
+            try {
+                const result = await (await worker).recognize(source);
+                const cleanText = cleanNicknames(result.data.text);
+                document.getElementById(`list-${id}`).value = cleanText.join('\n');
+                updateStatus(id, 'Готово');
+            } catch (err) {
+                updateStatus(id, 'Ошибка распознавания');
+                console.error(err);
+            }
+        }
+
+        // Захват кадра из видео
+        function processVideo(file, id) {
+            const video = document.createElement('video');
+            const canvas = document.createElement('canvas');
+            video.src = URL.createObjectURL(file);
+            
+            video.onloadeddata = () => {
+                video.currentTime = 1; // Берем кадр на 1-й секунде
+            };
+
+            video.onseeked = async () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                processImage(canvas.toDataURL('image/png'), id);
+            };
+        }
+
+        function updateStatus(id, text) {
+            document.getElementById(`status-${id}`).innerText = text;
+        }
+
+        // Очистка текста от мусора (символы, пустые строки)
+        function cleanNicknames(text) {
+            return text.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 3) // Игнорируем слишком короткие строки (шум)
+                .map(line => line.replace(/[^\w\dа-яА-ЯёЁ\s]/g, '')); // Удаляем спецсимволы, кроме букв и цифр
+        }
+
+        // Логика сравнения
+        function compareLists() {
+            const list1 = document.getElementById('list-1').value.split('\n').map(n => n.trim().toLowerCase()).filter(n => n);
+            const list2 = document.getElementById('list-2').value.split('\n').map(n => n.trim().toLowerCase()).filter(n => n);
+            
+            const set1 = new Set(list1);
+            const diff = list2.filter(name => !set1.has(name));
+
+            const output = document.getElementById('diff-output');
+            output.innerHTML = '';
+
+            if (diff.length === 0) {
+                output.innerHTML = '<p style="text-align:center">Новых никнеймов не обнаружено</p>';
+                return;
+            }
+
+            // Убираем дубликаты из результата
+            [...new Set(diff)].forEach(name => {
+                const div = document.createElement('div');
+                div.className = 'diff-item';
+                div.innerText = name.toUpperCase();
+                output.appendChild(div);
+            });
+        }
+    </script>
+</body>
+</html>
